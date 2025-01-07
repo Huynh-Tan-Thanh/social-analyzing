@@ -1,62 +1,36 @@
 import pandas as pd
-import numpy as np
-import os
 from itertools import combinations
+import numpy as np
 
-def extract_post_id(file_name):
-    """Trích xuất ID bài post từ tên file."""
-    base_name = os.path.basename(file_name)  # Lấy tên file (không kèm đường dẫn)
-    return base_name.split("_")[0]  # Lấy phần trước "_clean.xlsx"
+# Bước 1: Đọc dữ liệu
+vinhlinh_members = pd.read_excel('VinhLinh_member.xlsx')
+group_posts_updated = pd.read_excel('group_posts_updated.xlsx')
 
-def build_relation_matrix_from_files(file_list):
-    # Lưu thông tin từng bài post và các thành viên đã react
-    reactions_data = {}
+# Lấy danh sách ID từ VinhLinh_members
+member_ids = vinhlinh_members['User ID'].astype(str).tolist()
 
-    for file in file_list:
-        post_id = extract_post_id(file)  # Trích xuất ID bài post từ tên file
-        df = pd.read_excel(file)
-        members = df["User ID"].unique()  # Lấy danh sách các User ID từ file
-        reactions_data[post_id] = set(members)  # Gán danh sách User ID vào ID bài post
+# Bước 3: Tạo ma trận quan hệ
+# Khởi tạo ma trận với giá trị 0
+relation_matrix = pd.DataFrame(
+    data=0, index=member_ids, columns=member_ids
+)
 
-    # Hợp nhất danh sách tất cả các thành viên
-    all_members = set()
-    for members in reactions_data.values():
-        all_members.update(members)
-    all_members = list(all_members)  # Chuyển sang list để đánh index
+# Duyệt qua từng hàng của cột react trong group_posts_updated
+for react in group_posts_updated['react']:
+    if pd.notnull(react):
+        # Chuyển react thành danh sách các ID
+        ids = react.split(',')
+        ids = [id_.strip() for id_ in ids]  # Loại bỏ khoảng trắng
 
-    # Tạo ma trận quan hệ
-    member_index = {user_id: idx for idx, user_id in enumerate(all_members)}
-    matrix_size = len(all_members)
-    relation_matrix = np.zeros((matrix_size, matrix_size), dtype=int)
+        # Tạo tất cả các cặp kết hợp giữa các ID
+        for id1, id2 in combinations(ids, 2):
+            if id1 in member_ids and id2 in member_ids:
+                # Tăng giá trị quan hệ giữa hai ID
+                relation_matrix.loc[id1, id2] += 1
+                relation_matrix.loc[id2, id1] += 1
 
-    # Cập nhật ma trận dựa trên quan hệ bài post
-    for post_id, members in reactions_data.items():
-        for user1, user2 in combinations(members, 2):
-            idx1, idx2 = member_index[user1], member_index[user2]
-            relation_matrix[idx1, idx2] = 1
-            relation_matrix[idx2, idx1] = 1  # Ma trận đối xứng
+# Bước 4: Lưu ma trận quan hệ
+relation_matrix_path = 'relation_matrix.xlsx'
+relation_matrix.to_excel(relation_matrix_path)
 
-    # Chuyển ma trận thành DataFrame
-    relation_df = pd.DataFrame(relation_matrix, index=all_members, columns=all_members)
-    return relation_df
-
-# Danh sách file Excel chứa thông tin bài post và thành viên react
-file_list = [
-    "data/data_clean/1283943162304841_info_cleaned.xlsx",
-    "data/data_clean/1292648841434273_info_cleaned.xlsx",
-    "data/data_clean/1289832881715869_info_cleaned.xlsx",
-    "data/data_clean/1318294142203076_info_cleaned.xlsx",
-    "data/data_clean/1295218211177336_info_cleaned.xlsx",
-    "data/data_clean/1283943162304841_info_cleaned.xlsx",
-    "data/data_clean/1425326991499790_info_cleaned.xlsx",
-    "data/data_clean/1289369675095523_info_cleaned.xlsx",
-    "data/data_clean/1319622732070217_info_cleaned.xlsx",
-]
-
-# Tạo ma trận quan hệ
-relation_matrix_df = build_relation_matrix_from_files(file_list)
-
-# Xuất kết quả ra file Excel
-output_file = "D:/MangXH/DoAn/group-analyzing/data/data_clean/relation_matrix.xlsx"
-relation_matrix_df.to_excel(output_file)
-print(f"Relation matrix saved to {output_file}")
+print(f"Ma trận quan hệ đã được lưu tại: {relation_matrix_path}")
